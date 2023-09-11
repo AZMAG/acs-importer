@@ -1,12 +1,12 @@
-const { year, excelFile, outputDatabase } = require('./config');
-const axios = require('axios');
-const Papa = require('papaparse');
-const MagSQL = require('mag-node-sql');
+const { year, excelFile, outputDatabase } = require("./config");
+const axios = require("axios");
+const Papa = require("papaparse");
+const MagSQL = require("mag-node-sql");
 const sql = new MagSQL();
 
-const censusWebsiteRoot = `https://www2.census.gov/programs-surveys/acs/summary_file/${year}/prototype`;
-const oneYrPrefix = '1YRData/acsdt1y';
-const fiveYrPrefix = '5YRData/acsdt5y';
+const censusWebsiteRoot = `https://www2.census.gov/programs-surveys/acs/summary_file/${year}/table-based-SF/data`;
+const oneYrPrefix = "1YRData/acsdt1y";
+const fiveYrPrefix = "5YRData/acsdt5y";
 
 async function get1yrDataByTableId(tableId) {
   const oneYrUrl = `${censusWebsiteRoot}/${oneYrPrefix}${year}-${tableId.toLowerCase()}.dat`;
@@ -29,10 +29,10 @@ async function getGeoTableByYear(yr) {
   const res = await axios.get(fiveYrUrl);
   let { data } = Papa.parse(res.data, { header: true });
   data = data
-    .filter((row) => row['GEOID'])
+    .filter((row) => row["GEOID"])
     .map((row) => {
-      if (row['GEOID']) {
-        row['GEOID10'] = row['GEOID'].split('US')[1];
+      if (row["GEOID"]) {
+        row["GEOID10"] = row["GEOID"].split("US")[1];
         return row;
       }
     });
@@ -40,41 +40,41 @@ async function getGeoTableByYear(yr) {
 }
 
 async function get5yrGeoTable() {
-  return getGeoTableByYear('5');
+  return getGeoTableByYear("5");
 }
 async function get1yrGeoTable() {
-  return getGeoTableByYear('1');
+  return getGeoTableByYear("1");
 }
 
 function processData(res) {
   const lines = res.data.split(`\n`);
-  const headers = lines[0].split('|');
+  const headers = lines[0].split("|");
 
   let dataRows = [];
   for (let j = 1; j < lines.length; j++) {
     const rawLine = lines[j];
-    const arrLine = rawLine.split('|');
+    const arrLine = rawLine.split("|");
     let lineData = {};
 
     headers.forEach((header, k) => {
       let value = arrLine[k];
-      if (header !== 'GEO_ID') {
+      if (header !== "GEO_ID") {
         value = Number(value);
       }
       lineData[header] = value;
     });
 
     Object.keys(lineData).forEach((key) => {
-      if (key.includes('_E')) {
+      if (key.includes("_E")) {
         // Remove table number from field names
-        lineData[key.replace('_E', '')] = lineData[key];
+        lineData[key.replace("_E", "")] = lineData[key];
         delete lineData[key];
-      } else if (key.includes('_M')) {
+      } else if (key.includes("_M")) {
         // Filter out margin of error fields.
         delete lineData[key];
       }
     });
-    if (lineData['GEO_ID'] && lineData['GEO_ID'] !== '') {
+    if (lineData["GEO_ID"] && lineData["GEO_ID"] !== "") {
       // lineData['GEOID10'] = lineData['GEO_ID'].split('US')[1];
       dataRows.push(lineData);
     }
@@ -87,7 +87,7 @@ async function getTableColumnNames(tableId) {
     `Select top 0 * from ${outputDatabase}.dbo.${tableId}`
   );
   const columnNames = Object.keys(recordset.columns).filter(
-    (col) => col !== 'GEO_ID'
+    (col) => col !== "GEO_ID"
   );
   return columnNames;
 }
@@ -102,12 +102,12 @@ async function createJoinedViewByYear(tables, yr) {
 
   for (let i = 0; i < tables.length; i++) {
     const table = tables[i];
-    const tableId = table['Table ID'];
+    const tableId = table["Table ID"];
 
     const fullTableName = `${outputDatabase}.dbo.${tableId}`;
 
     const selectFields = await getTableColumnNames(tableId);
-    selectTerms.push(` ${selectFields.join(', ')}`);
+    selectTerms.push(` ${selectFields.join(", ")}`);
     joinTerms.push(
       `LEFT JOIN ${fullTableName} ON ${fullTableName}.GEO_ID = ${geoTableName}.DADSID`
     );
@@ -123,7 +123,7 @@ async function createJoinedViewByYear(tables, yr) {
       CREATE VIEW dbo.ACS_${yr}yr_Viewer as
       SELECT ${geoTableName}.*, ${selectTerms}
       FROM ${geoTableName}
-      ${joinTerms.join(' ')}
+      ${joinTerms.join(" ")}
   `;
   console.log(query);
   await sql.RunQuery(query);
